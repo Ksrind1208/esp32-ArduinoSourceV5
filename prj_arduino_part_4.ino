@@ -567,6 +567,13 @@ void setupWiFi(){
   if (shouldSaveConfig) {
     saveConfigFile();
   }
+
+  client.setClient(wifiClient);
+  client.setKeepAlive(1); 
+  wifiClient.setTimeout(1000); 
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callbackMQTT);
+  connectMQTT();
 }
 
 // ket noi lai WiFi
