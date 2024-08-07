@@ -422,7 +422,7 @@ void connectEthernet() {
   byte* mac = new byte[6];
   macCharArrayToBytes(ETHERNET_MAC, mac);
   Ethernet.init(ETHERNET_CS_PIN);
-  Ethernet.begin(mac,500,500);
+  Ethernet.begin(mac);
   // delay(1000);
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   while(Ethernet.linkStatus()!=LinkON){
@@ -625,9 +625,9 @@ void TaskButtonLed(void *pvParameters) {
       // Send message over MQTT if WiFi is connected
       if (WiFi.status() == WL_CONNECTED || Ethernet.linkStatus() == LinkON) {
         if (led_state == LOW) {
-          client.publish(led_Topic, "OFF");
+          client.publish("led_status", "OFF");
         } else {
-          client.publish(led_Topic, "ON");
+          client.publish("led_status", "ON");
         }
       }
     }
@@ -781,10 +781,10 @@ void loop() {
 
   // Send data to MQTT at intervals
   unsigned long now = millis();
-  if (now - lastScanTime >= 3000) {
-      lastScanTime = now;
-      checkDateTimeList();
-  }
+  // if (now - lastScanTime >= 3000) {
+  //     lastScanTime = now;
+  //     checkDateTimeList();
+  // }
   if (now - lastMsg > 3000) {
     lastMsg = now;
     float temp = dht.readTemperature();
@@ -794,19 +794,20 @@ void loop() {
 
     if (client.connected()) {
       client.publish(temp_humid_Topic, data.c_str());
-      client.publish("dhtTemp", String(temp).c_str());
-      client.publish("dhtHum", String(humid).c_str());
+      client.publish("lastWillTopic","Online");
+      // client.publish("dhtTemp", String(temp).c_str());
+      // client.publish("dhtHum", String(humid).c_str());
       if (thresholdsSet) {
         client.publish(topic_threshold, ("Temp : " + String(thresholdTemp) + " / " + "Hum : " + String(thresholdHumid)).c_str());
         if (temp > thresholdTemp || humid > thresholdHumid) {
           Serial.println("Cảnh báo: Nhiệt độ hoặc độ ẩm vượt quá ngưỡng!");
           led_state=1;
           digitalWrite(LED_PIN,led_state);
-          client.publish(led_Topic,"ON");
+          client.publish("led_status","ON");
         }else{
           led_state=0;
           digitalWrite(LED_PIN,led_state);
-          client.publish(led_Topic,"OFF");
+          client.publish("led_status","OFF");
         }
       }
     } else {
@@ -837,6 +838,7 @@ void loop() {
 
 void checkDateTimeList() {
     DateTime nowDateTime = DS1307_RTC.now();
+    Serial.println(nowDateTime.year());
     char currentDate[11];
     char currentTime[6];
     snprintf(currentDate, sizeof(currentDate), "%02d/%02d/%04d", nowDateTime.day(), nowDateTime.month(), nowDateTime.year());
@@ -864,24 +866,24 @@ void checkDateTimeList() {
         dateTimeListStruct.tm_mon -= 1;  
         sscanf(timeStr.c_str(), "%d:%d", &dateTimeListStruct.tm_hour, &dateTimeListStruct.tm_min);
         time_t dateTimeListUnix = mktime(&dateTimeListStruct);
-        if (currentTimeUnix == dateTimeListUnix) {
+        if (currentTimeUnix == dateTimeListUnix || currentTimeUnix > dateTimeListUnix) {
             Serial.println("Thời gian trùng khớp với danh sách!");
             delay(1000); 
             dateTimeList.erase(dateTimeList.begin() + i);
             led_state=1;
             digitalWrite(LED_PIN,led_state);
-            client.publish(led_Topic,"ON"); 
+            client.publish("led_status","ON"); 
             i--; 
             
         } 
-        else if (currentTimeUnix > dateTimeListUnix) {
-            Serial.println("Thời gian hiện tại lớn hơn thời gian trong danh sách, xóa mục này.");
-            led_state=1;
-            digitalWrite(LED_PIN,led_state);
-            client.publish(led_Topic,"ON"); 
-            dateTimeList.erase(dateTimeList.begin() + i); 
-            i--; 
-        } 
+        // else if (currentTimeUnix > dateTimeListUnix) {
+        //     Serial.println("Thời gian hiện tại lớn hơn thời gian trong danh sách, xóa mục này.");
+        //     led_state=1;
+        //     digitalWrite(LED_PIN,led_state);
+        //     client.publish("led_status","ON"); 
+        //     dateTimeList.erase(dateTimeList.begin() + i); 
+        //     i--; 
+        // } 
         else {
             Serial.println("Thời gian hiện tại nhỏ hơn thời gian trong danh sách, không làm gì.");
         }
@@ -952,24 +954,24 @@ void checkDateTimeOFFList() {
 
         time_t dateTimeListUnix = mktime(&dateTimeListStruct);
 
-        if (currentTimeUnix == dateTimeListUnix) {
+        if (currentTimeUnix == dateTimeListUnix || currentTimeUnix > dateTimeListUnix) {
             Serial.println("Thời gian trùng khớp với danh sách OFF!");
             delay(1000);
             led_state=0;
             digitalWrite(LED_PIN,led_state);
-            client.publish(led_Topic,"OFF"); 
+            client.publish("led_status","OFF"); 
             dateTimeOFF.erase(dateTimeOFF.begin() + i);
             i--; 
             
         } 
-        else if (currentTimeUnix > dateTimeListUnix) {
-            Serial.println("Thời gian hiện tại lớn hơn thời gian trong danh sách OFF, xóa mục này.");
-            led_state=0;
-            digitalWrite(LED_PIN,led_state);
-            client.publish(led_Topic,"OFF"); 
-            dateTimeOFF.erase(dateTimeOFF.begin() + i); 
-            i--;
-        } 
+        // else if (currentTimeUnix > dateTimeListUnix) {
+        //     Serial.println("Thời gian hiện tại lớn hơn thời gian trong danh sách OFF, xóa mục này.");
+        //     led_state=0;
+        //     digitalWrite(LED_PIN,led_state);
+        //     client.publish("led_status","OFF"); 
+        //     dateTimeOFF.erase(dateTimeOFF.begin() + i); 
+        //     i--;
+        // } 
         else {
             Serial.println("Thời gian hiện tại nhỏ hơn thời gian trong danh sách OFF, không làm gì.");
         }
@@ -981,6 +983,7 @@ void checkDateTimeOFFList() {
 void TaskDateTimeOff(void *pvParameters) {
   for (;;) {
     checkDateTimeOFFList();
-    vTaskDelay(1000);
+    vTaskDelay(3000);
+    checkDateTimeList();
   }
 }
