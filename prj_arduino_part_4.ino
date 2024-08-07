@@ -87,14 +87,22 @@ static int wifiRetry=0;
 WiFiClient wifiClient;
 EthernetClient ethClient;
 PubSubClient client;
-const char* led_Topic = "/topic/qos0";
+const char* led_Topic = "/topic/led";
 const char* temp_humid_Topic = "home/sensor/TemperatureandHumid";
 const char* reboot_Topic="reboot";
+const char* topic_threshold = "/topic/threshold"; 
+const char* topic_setCheckBox = "/topic/checkBox";
 const char* topic_AutoTime = "Topic_AutoTime";
+
+float thresholdTemp = 0.0; 
+float thresholdHumid = 0.0;
+bool thresholdsSet = false;
 
 #define MSG_BUFFER_SIZE (50)
 char msg[MSG_BUFFER_SIZE];
 
+void TaskBLE(void *pvParameters);
+TaskHandle_t firebase_task_handle_ble;
 RTC_DS1307 DS1307_RTC;
 DateTime nowRTC;
 struct CustomDateTime {
@@ -138,6 +146,7 @@ void connectMQTT() {
         client.subscribe(led_Topic);
         client.subscribe(temp_humid_Topic);
         client.subscribe(topic_AutoTime);
+        client.subscribe(topic_threshold);
         client.subscribe(reboot_Topic);
         
         // delay(1500);
@@ -166,6 +175,33 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
             digitalWrite(LED_PIN, LOW);
         }
     }
+
+    if (strcmp(topic, topic_threshold) == 0) {
+        if (incommingMessage.equals("OFF")) {
+            thresholdTemp = 0.0;
+            thresholdHumid = 0.0;
+            thresholdsSet = false;
+            Serial.println("Ngưỡng đã được đặt lại");
+        } else {
+          int tempIndex = incommingMessage.indexOf("Temp : ");
+          int humIndex = incommingMessage.indexOf("Hum : ");
+
+          if (tempIndex != -1 && humIndex != -1) {
+            String tempStr = incommingMessage.substring(tempIndex + 7, humIndex - 2);
+            String humidStr = incommingMessage.substring(humIndex + 5);
+
+            thresholdTemp = tempStr.toFloat();
+            thresholdHumid = humidStr.toFloat();
+            thresholdsSet = true;
+
+            Serial.print("Ngưỡng đã được thiết lập - Nhiệt độ: ");
+            Serial.print(thresholdTemp);
+            Serial.print(", Độ ẩm: ");
+            Serial.println(thresholdHumid);
+          }
+        }
+    }
+
     if (strcmp(topic, topic_AutoTime) == 0) {
         if (incommingMessage.startsWith("HenOn - ON - ")) {
             // Tách giá trị Date và Time từ tin nhắn
@@ -669,7 +705,23 @@ void setup() {
     2,  // Priority
     NULL
   );
-  
+  //RTC
+  xTaskCreate(
+    TaskRTC,
+    "RTC Task",
+    2048 ,
+    NULL,
+    2,
+    NULL
+  );
+  xTaskCreate(
+    TaskAdjustRTC,
+    "RTC Adjustment Task",
+    2048 ,
+    NULL,
+    2,
+    NULL
+  );  
   setupWiFi();
   vTaskDelay(2000 / portTICK_PERIOD_MS);
 
@@ -680,29 +732,15 @@ void setup() {
   //BLE
   xTaskCreate(
     TaskBLE,
-    "Ble Task",
+    "Blue Task",
     2048 ,
     NULL,
     2,
     NULL
+    // &firebase_task_handle_ble,
+    // 1
   );
-  //RTC
-  xTaskCreate(
-    TaskRTC,
-    "RTC Task",
-    2048 ,
-    NULL,
-    2,
-    NULL
-  );
-  // xTaskCreate(
-  //   TaskAdjustRTC,
-  //   "RTC Adjustment Task",
-  //   2048 ,
-  //   NULL,
-  //   2,
-  //   NULL
-  // );
+
   xTaskCreate(
     TaskDateTimeOff,
     "TaskDateTimeOff Task",
@@ -751,6 +789,19 @@ void loop() {
       client.publish(temp_humid_Topic, data.c_str());
       client.publish("dhtTemp", String(temp).c_str());
       client.publish("dhtHum", String(humid).c_str());
+      if (thresholdsSet) {
+        client.publish(topic_threshold, ("Temp : " + String(thresholdTemp) + " / " + "Hum : " + String(thresholdHumid)).c_str());
+        if (temp > thresholdTemp || humid > thresholdHumid) {
+          Serial.println("Cảnh báo: Nhiệt độ hoặc độ ẩm vượt quá ngưỡng!");
+          led_state=1;
+          digitalWrite(LED_PIN,led_state);
+          client.publish(led_Topic,"ON");
+        }else{
+          led_state=0;
+          digitalWrite(LED_PIN,led_state);
+          client.publish(led_Topic,"OFF");
+        }
+      }
     } else {
       Serial.println("Mat ket noi server");
       if(WiFi.status() == WL_CONNECTED){
