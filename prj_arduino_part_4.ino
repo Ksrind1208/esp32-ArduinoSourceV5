@@ -709,7 +709,7 @@ void setup() {
     "Task Button Control Led",   // Name for humans
     2048,  // Stack size in bytes
     NULL,
-    2,  // Priority
+    1,  // Priority
     NULL
   );
   //RTC
@@ -718,7 +718,7 @@ void setup() {
     "RTC Task",
     2048 ,
     NULL,
-    2,
+    1,
     NULL
   );
   xTaskCreate(
@@ -726,24 +726,25 @@ void setup() {
     "RTC Adjustment Task",
     2048 ,
     NULL,
-    2,
+    1,
     NULL
   );  
   setupWiFi();
-  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  // vTaskDelay(2000 / portTICK_PERIOD_MS);
 
   SerialBT.begin("ESP32_Bluetooth"); 
   Serial.println("The device started, now you can pair it with Bluetooth!"); 
   vTaskDelay(1000 / portTICK_PERIOD_MS);
 
   //BLE
-  xTaskCreate(
+  xTaskCreatePinnedToCore(
     TaskBLE,
     "Blue Task",
     2048 ,
     NULL,
-    2,
-    NULL
+    1,
+    NULL,
+    1
     // &firebase_task_handle_ble,
     // 1
   );
@@ -757,14 +758,14 @@ void setup() {
     NULL
   );
 
-  if(WiFi.status() == WL_CONNECTED){
-    client.setClient(wifiClient);
-    client.setKeepAlive(1); 
-    wifiClient.setTimeout(1000); 
-    client.setServer(mqtt_server, mqtt_port);
-    client.setCallback(callbackMQTT);
-    connectMQTT();
-  }
+  // if(WiFi.status() == WL_CONNECTED){
+  //   client.setClient(wifiClient);
+  //   client.setKeepAlive(1); 
+  //   wifiClient.setTimeout(1000); 
+  //   client.setServer(mqtt_server, mqtt_port);
+  //   client.setCallback(callbackMQTT);
+  //   connectMQTT();
+  // }
 }
 
 void loop() {
@@ -819,7 +820,8 @@ void loop() {
         wifiClient.setTimeout(1000); 
         client.setServer(mqtt_server, mqtt_port);
         client.setCallback(callbackMQTT);
-      }else if(Ethernet.linkStatus() == LinkON){
+      }else 
+      if(Ethernet.linkStatus() == LinkON){
         Serial.println("Ethernet connected");
         client.setClient(ethClient);
         client.setKeepAlive(1); 
