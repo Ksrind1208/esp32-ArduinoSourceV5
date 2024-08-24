@@ -732,7 +732,7 @@ void setup() {
   setupWiFi();
   // vTaskDelay(2000 / portTICK_PERIOD_MS);
 
-  SerialBT.begin("ESP32_Bluetooth"); 
+  SerialBT.begin("ESP32_Bluetooth12"); 
   Serial.println("The device started, now you can pair it with Bluetooth!"); 
   vTaskDelay(1000 / portTICK_PERIOD_MS);
 
